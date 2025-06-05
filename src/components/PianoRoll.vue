@@ -744,14 +744,27 @@ export default {
       if (!clip.value) return
       
       const track = projectStore.tracks.find(t => t.id === clip.value.trackId)
-      if (track && audioStore.isInitialized) {
-        const noteName = getMidiNoteName(midiNote)
-        audioStore.playNote(track.id, noteName, '8n')
+      if (track) {
+        // Initialize audio if not already done
+        if (!audioStore.isInitialized) {
+          audioStore.initializeAudio()
+        }
         
-        playingNotes.value.add(midiNote)
-        setTimeout(() => {
-          playingNotes.value.delete(midiNote)
-        }, 200)
+        // Create track instrument if doesn't exist
+        if (audioStore.isInitialized && !audioStore.instruments?.has(track.id)) {
+          audioStore.createTrack(track.id, track.type || 'midi')
+        }
+        
+        // Play the note
+        if (audioStore.isInitialized) {
+          const noteName = getMidiNoteName(midiNote)
+          audioStore.playNote(track.id, noteName, '8n')
+          
+          playingNotes.value.add(midiNote)
+          setTimeout(() => {
+            playingNotes.value.delete(midiNote)
+          }, 200)
+        }
       }
     }
 

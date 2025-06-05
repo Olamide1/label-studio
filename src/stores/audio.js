@@ -241,6 +241,7 @@ export const useAudioStore = defineStore('audio', () => {
     metronomeEnabled,
     audioContextState,
     formattedPosition,
+    instruments, // Expose instruments map
     
     // Actions
     initializeAudio,

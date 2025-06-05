@@ -553,7 +553,7 @@ export default {
     }
 
     // Timeline clip functions
-    function createClipOnTimeline(event, trackId) {
+    async function createClipOnTimeline(event, trackId) {
       const rect = event.currentTarget.getBoundingClientRect()
       const clickX = event.clientX - rect.left
       const timePosition = Math.max(0, clickX / timelineScale.value) // Timeline area doesn't need offset
@@ -563,10 +563,15 @@ export default {
       
       const clip = projectStore.addClip(trackId, snappedTime, 4) // 4 beat default duration
       
-      // Create audio track if not exists
-      if (audioStore.isInitialized && !audioStore.instruments?.has(trackId)) {
-        const track = projectStore.tracks.find(t => t.id === trackId)
-        audioStore.createTrack(trackId, track?.type || 'midi')
+      // Initialize audio and create track if needed
+      const track = projectStore.tracks.find(t => t.id === trackId)
+      if (track) {
+        if (!audioStore.isInitialized) {
+          await audioStore.initializeAudio()
+        }
+        if (audioStore.isInitialized && !audioStore.instruments?.has(trackId)) {
+          audioStore.createTrack(trackId, track.type || 'midi')
+        }
       }
       
       // Select the new clip
