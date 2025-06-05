@@ -240,49 +240,99 @@
 
       <!-- Timeline Panel -->
       <div class="flex-1 bg-gray-900 flex flex-col">
-        <div class="p-4 border-b border-gray-700">
+        <!-- Timeline Header -->
+        <div class="p-4 border-b border-gray-700 flex-shrink-0">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-white">Timeline</h2>
             <div class="flex items-center space-x-4">
               <div class="text-sm text-gray-400">
                 Clips: {{ projectStore.clipCount }}
               </div>
+              <div class="flex items-center space-x-2">
+                <button 
+                  @click="zoomOut"
+                  class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
+                >
+                  -
+                </button>
+                <span class="text-xs text-gray-400">{{ Math.round(timelineScale) }}px/beat</span>
+                <button 
+                  @click="zoomIn"
+                  class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Timeline Ruler -->
-        <div class="bg-gray-800 border-b border-gray-700 p-2 relative">
-          <div class="flex items-center text-sm text-gray-300" style="margin-left: 100px;">
-            <!-- Beat markers -->
-            <div 
-              v-for="beat in 32" 
-              :key="beat"
-              class="relative flex items-center justify-center text-xs"
-              :style="{ width: `${timelineScale}px` }"
-            >
-              <div class="absolute left-0 top-0 w-px h-4 bg-gray-600"></div>
-              <span v-if="beat % 4 === 1" class="font-medium">{{ Math.ceil(beat / 4) }}</span>
-              <span v-else-if="beat % 4 === 0" class="text-gray-500">{{ beat % 4 || 4 }}</span>
-              <span v-else class="text-gray-500">{{ beat % 4 }}</span>
+        <!-- Timeline Container with Horizontal Scroll -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <!-- Timeline Ruler -->
+          <div class="bg-gray-800 border-b border-gray-700 flex-shrink-0 relative">
+            <div class="flex">
+              <!-- Fixed track name area -->
+              <div class="w-40 flex-shrink-0 bg-gray-800 border-r border-gray-700 p-2 flex items-center">
+                <span class="text-xs text-gray-400 font-medium">Tracks</span>
+              </div>
+              
+              <!-- Scrollable ruler area -->
+              <div class="flex-1 overflow-x-auto timeline-scroll">
+                <div class="flex items-center text-sm text-gray-300 p-2" :style="{ minWidth: `${32 * timelineScale}px` }">
+                  <!-- Beat markers -->
+                  <div 
+                    v-for="beat in 64" 
+                    :key="beat"
+                    class="relative flex items-center justify-center text-xs flex-shrink-0"
+                    :style="{ width: `${timelineScale}px` }"
+                  >
+                    <div class="absolute left-0 top-0 w-px h-4 bg-gray-600"></div>
+                    <span v-if="beat % 4 === 1" class="font-medium">{{ Math.ceil(beat / 4) }}</span>
+                    <span v-else-if="beat % 4 === 0" class="text-gray-500">{{ beat % 4 || 4 }}</span>
+                    <span v-else class="text-gray-500">{{ beat % 4 }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          
-          <!-- Track name area -->
-          <div class="absolute left-2 top-2 text-xs text-gray-400">
-            Tracks
-          </div>
-        </div>
 
-        <!-- Timeline Content -->
-        <div class="flex-1 p-4">
-          <div v-if="projectStore.tracks.length > 0" class="space-y-4">
-            <div 
-              v-for="track in projectStore.tracks" 
-              :key="track.id"
-              class="h-16 bg-gray-800 rounded-lg relative border border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors"
-              @click="createClipOnTimeline($event, track.id)"
-            >
+          <!-- Timeline Content -->
+          <div class="flex-1 flex overflow-hidden">
+            <!-- Fixed track names -->
+            <div class="w-40 flex-shrink-0 bg-gray-900 border-r border-gray-700 overflow-y-auto">
+              <div v-if="projectStore.tracks.length > 0" class="p-2 space-y-4">
+                <div 
+                  v-for="track in projectStore.tracks" 
+                  :key="track.id"
+                  class="h-16 bg-gray-800 rounded-lg border border-gray-700 flex items-center px-3 transition-colors"
+                  :class="{ 'ring-2 ring-purple-500': projectStore.selectedTrackId === track.id }"
+                  @click="projectStore.selectedTrackId = track.id"
+                >
+                  <div class="flex items-center space-x-2 w-full">
+                    <div 
+                      class="w-3 h-3 rounded-full flex-shrink-0"
+                      :style="{ backgroundColor: track.color }"
+                    ></div>
+                    <span class="text-sm text-white font-medium truncate">{{ track.name }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="p-4 text-center text-gray-400">
+                <p class="text-sm">No tracks</p>
+              </div>
+            </div>
+            
+            <!-- Scrollable timeline area -->
+            <div class="flex-1 overflow-auto timeline-scroll">
+              <div class="p-2" :style="{ minWidth: `${64 * timelineScale}px` }">
+                <div v-if="projectStore.tracks.length > 0" class="space-y-4">
+                  <div 
+                    v-for="track in projectStore.tracks" 
+                    :key="track.id"
+                    class="h-16 bg-gray-800 rounded-lg relative border border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors"
+                    @click="createClipOnTimeline($event, track.id)"
+                  >
               <!-- Track name label -->
               <div class="absolute left-2 top-2 z-10">
                 <span class="text-xs text-gray-400 bg-gray-900 px-2 py-1 rounded">{{ track.name }}</span>
@@ -319,8 +369,8 @@
               </div>
             </div>
           </div>
-
-          <div v-else class="flex-1 flex items-center justify-center text-gray-400">
+          
+          <div v-else class="flex-1 flex items-center justify-center text-gray-400 h-64">
             <div class="text-center">
               <svg class="w-24 h-24 mx-auto mb-4 opacity-30" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/>
@@ -333,6 +383,9 @@
       </div>
     </div>
   </div>
+</div>
+</div>
+</div>
 </template>
 
 <script>
@@ -425,6 +478,15 @@ export default {
         const note = notes[Math.floor(Math.random() * notes.length)]
         audioStore.playNote(trackId, note)
       }
+    }
+
+    // Timeline zoom functions
+    function zoomIn() {
+      timelineScale.value = Math.min(timelineScale.value * 1.5, 200)
+    }
+
+    function zoomOut() {
+      timelineScale.value = Math.max(timelineScale.value / 1.5, 20)
     }
 
     // Timeline clip functions
@@ -599,6 +661,8 @@ export default {
       startDragging,
       startResizing,
       getTrackClips: projectStore.getTrackClips,
+      zoomIn,
+      zoomOut,
       // Timeline state
       isDragging,
       isResizing,
@@ -661,6 +725,29 @@ export default {
 
 .timeline-clip:hover .resize-handle {
   opacity: 1;
+}
+
+/* Timeline scrolling */
+.timeline-scroll {
+  scroll-behavior: smooth;
+}
+
+.timeline-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.timeline-scroll::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.timeline-scroll::-webkit-scrollbar-thumb {
+  background: #6b7280;
+  border-radius: 4px;
+}
+
+.timeline-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 /* Prevent text selection during dragging */
