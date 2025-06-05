@@ -598,6 +598,7 @@ export default {
       editClip,
       startDragging,
       startResizing,
+      getTrackClips: projectStore.getTrackClips,
       // Timeline state
       isDragging,
       isResizing,
