@@ -40,19 +40,8 @@
         </div>
       </div>
 
-      <!-- Piano Roll Placeholder -->
-      <div class="bg-gray-800 rounded-lg p-4">
-        <h4 class="text-sm font-medium text-white mb-3">Piano Roll</h4>
-        <div class="h-64 bg-gray-700 rounded border border-gray-600 flex items-center justify-center">
-          <div class="text-center text-gray-400">
-            <svg class="w-16 h-16 mx-auto mb-2 opacity-50" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-            </svg>
-            <p class="text-sm">Piano Roll Editor</p>
-            <p class="text-xs opacity-75">Click and drag to add notes</p>
-          </div>
-        </div>
-      </div>
+      <!-- Piano Roll Editor -->
+      <PianoRoll :clipId="clipId" />
 
       <!-- Note List -->
       <div class="bg-gray-800 rounded-lg p-3">
@@ -131,9 +120,13 @@
 <script>
 import { ref, computed, watch } from 'vue'
 import { useProjectStore } from '../stores/project'
+import PianoRoll from './PianoRoll.vue'
 
 export default {
   name: 'MidiEditor',
+  components: {
+    PianoRoll
+  },
   props: {
     clipId: {
       type: String,

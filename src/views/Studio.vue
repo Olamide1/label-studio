@@ -278,11 +278,11 @@
               </div>
               
               <!-- Scrollable ruler area -->
-              <div class="flex-1 overflow-x-auto timeline-scroll">
-                <div class="flex items-center text-sm text-gray-300 p-2" :style="{ minWidth: `${32 * timelineScale}px` }">
+              <div class="flex-1 overflow-x-auto timeline-scroll" ref="rulerScroll">
+                <div class="flex items-center text-sm text-gray-300 p-2" :style="{ width: `${timelineWidth}px` }">
                   <!-- Beat markers -->
                   <div 
-                    v-for="beat in 64" 
+                    v-for="beat in Math.ceil(timelineWidth / timelineScale)" 
                     :key="beat"
                     class="relative flex items-center justify-center text-xs flex-shrink-0"
                     :style="{ width: `${timelineScale}px` }"
@@ -324,51 +324,46 @@
             </div>
             
             <!-- Scrollable timeline area -->
-            <div class="flex-1 overflow-auto timeline-scroll">
-              <div class="p-2" :style="{ minWidth: `${64 * timelineScale}px` }">
+            <div class="flex-1 overflow-auto timeline-scroll" ref="timelineScroll" @scroll="syncScroll">
+              <div :style="{ width: `${timelineWidth}px` }" class="p-2">
                 <div v-if="projectStore.tracks.length > 0" class="space-y-4">
                   <div 
                     v-for="track in projectStore.tracks" 
                     :key="track.id"
-                    class="h-16 bg-gray-800 rounded-lg relative border border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors"
+                    class="timeline-track h-16 bg-gray-800 rounded-lg relative border border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors"
                     @click="createClipOnTimeline($event, track.id)"
                   >
-              <!-- Track name label -->
-              <div class="absolute left-2 top-2 z-10">
-                <span class="text-xs text-gray-400 bg-gray-900 px-2 py-1 rounded">{{ track.name }}</span>
-              </div>
-              
-              <!-- Track clips -->
-              <div 
-                v-for="clip in getTrackClips(track.id)" 
-                :key="clip.id"
-                class="timeline-clip absolute top-1 h-14 rounded border-2 cursor-move flex items-center justify-center text-xs font-medium text-white transition-all"
-                :style="getClipStyle(clip)"
-                :class="{ 
-                  'selected': projectStore.selectedClipId === clip.id,
-                  'ring-2 ring-purple-400': projectStore.selectedClipId === clip.id 
-                }"
-                @click.stop="selectClip(clip.id)"
-                @mousedown="startDragging($event, clip.id)"
-                @dblclick="editClip(clip.id)"
-              >
-                <div class="text-center">
-                  <div class="font-semibold">{{ getClipDisplayName(clip) }}</div>
-                  <div class="text-xs opacity-75">{{ clip.duration }}s</div>
+                    <!-- Track clips -->
+                    <div 
+                      v-for="clip in getTrackClips(track.id)" 
+                      :key="clip.id"
+                      class="timeline-clip absolute top-1 h-14 rounded border-2 cursor-move flex items-center justify-center text-xs font-medium text-white transition-all"
+                      :style="getClipStyle(clip)"
+                      :class="{ 
+                        'selected': projectStore.selectedClipId === clip.id,
+                        'ring-2 ring-purple-400': projectStore.selectedClipId === clip.id 
+                      }"
+                      @click.stop="selectClip(clip.id)"
+                      @mousedown="startDragging($event, clip.id)"
+                      @dblclick="editClip(clip.id)"
+                    >
+                      <div class="text-center">
+                        <div class="font-semibold">{{ getClipDisplayName(clip) }}</div>
+                        <div class="text-xs opacity-75">{{ clip.duration }}s</div>
+                      </div>
+                      
+                      <!-- Resize handles -->
+                      <div 
+                        class="resize-handle absolute left-0 top-0 w-2 h-full cursor-w-resize bg-white bg-opacity-20 hover:bg-opacity-40 transition-all"
+                        @mousedown.stop="startResizing($event, clip.id, 'left')"
+                      ></div>
+                      <div 
+                        class="resize-handle absolute right-0 top-0 w-2 h-full cursor-e-resize bg-white bg-opacity-20 hover:bg-opacity-40 transition-all"
+                        @mousedown.stop="startResizing($event, clip.id, 'right')"
+                      ></div>
+                    </div>
+                  </div>
                 </div>
-                
-                <!-- Resize handles -->
-                <div 
-                  class="resize-handle absolute left-0 top-0 w-2 h-full cursor-w-resize bg-white bg-opacity-20 hover:bg-opacity-40 transition-all"
-                  @mousedown.stop="startResizing($event, clip.id, 'left')"
-                ></div>
-                <div 
-                  class="resize-handle absolute right-0 top-0 w-2 h-full cursor-e-resize bg-white bg-opacity-20 hover:bg-opacity-40 transition-all"
-                  @mousedown.stop="startResizing($event, clip.id, 'right')"
-                ></div>
-              </div>
-            </div>
-          </div>
           
           <div v-else class="flex-1 flex items-center justify-center text-gray-400 h-64">
             <div class="text-center">
@@ -384,24 +379,62 @@
     </div>
   </div>
 </div>
+
+  <!-- MIDI Editor Modal -->
+  <div 
+    v-if="showMidiEditor && projectStore.selectedClipId"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    @click.self="closeMidiEditor"
+  >
+    <div class="bg-gray-900 rounded-lg shadow-2xl w-full max-w-6xl h-5/6 overflow-hidden">
+      <!-- Modal Header -->
+      <div class="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">MIDI Editor</h2>
+        <button 
+          @click="closeMidiEditor"
+          class="text-gray-400 hover:text-white transition-colors"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Modal Content -->
+      <div class="h-full overflow-auto">
+        <MidiEditor :clipId="projectStore.selectedClipId" />
+      </div>
+    </div>
+  </div>
 </div>
 </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useProjectStore } from '../stores/project'
 import { useCollaborationStore } from '../stores/collaboration'
 import { useAudioStore } from '../stores/audio'
+import MidiEditor from '../components/MidiEditor.vue'
 
 export default {
   name: 'Studio',
+  components: {
+    MidiEditor
+  },
   setup() {
     const projectStore = useProjectStore()
     const collaborationStore = useCollaborationStore()
     const audioStore = useAudioStore()
     
     const bpmInput = ref(120)
+    
+    // Modal states
+    const showMidiEditor = ref(false)
+    
+    // Template refs
+    const rulerScroll = ref(null)
+    const timelineScroll = ref(null)
     
     // Timeline interaction state
     const isDragging = ref(false)
@@ -413,6 +446,22 @@ export default {
       resizeDirection: null
     })
     const timelineScale = ref(50) // pixels per beat
+    
+    // Calculate dynamic timeline width based on content
+    const timelineWidth = computed(() => {
+      if (projectStore.clips.length === 0) {
+        // Default to 8 beats (2 measures) for empty timeline
+        return 8 * timelineScale.value
+      }
+      
+      // Find the rightmost clip edge
+      const maxTime = Math.max(...projectStore.clips.map(clip => clip.startTime + clip.duration))
+      
+      // Add 4 beats of padding for comfortable editing
+      const totalBeats = Math.max(8, Math.ceil(maxTime) + 4)
+      
+      return totalBeats * timelineScale.value
+    })
 
     onMounted(async () => {
       // Initialize collaboration
@@ -420,6 +469,7 @@ export default {
       if (doc) {
         projectStore.initializeProject()
       }
+      
     })
 
     async function initializeAndPlay() {
@@ -438,6 +488,19 @@ export default {
       const track = projectStore.addTrack(type)
       if (audioStore.isInitialized) {
         audioStore.createTrack(track.id, type)
+      }
+      
+      // Optionally add a sample clip for testing (MIDI only)
+      if (type === 'midi') {
+        const clip = projectStore.addClip(track.id, 0, 4)
+        // Add some sample notes to test the Piano Roll
+        const sampleNotes = [
+          { pitch: 'C4', time: 0, duration: 0.5, velocity: 80 },
+          { pitch: 'E4', time: 0.5, duration: 0.5, velocity: 70 },
+          { pitch: 'G4', time: 1, duration: 0.5, velocity: 90 },
+          { pitch: 'C5', time: 1.5, duration: 1, velocity: 85 }
+        ]
+        projectStore.updateClip(clip.id, { data: { notes: sampleNotes } })
       }
     }
 
@@ -493,7 +556,7 @@ export default {
     function createClipOnTimeline(event, trackId) {
       const rect = event.currentTarget.getBoundingClientRect()
       const clickX = event.clientX - rect.left
-      const timePosition = Math.max(0, (clickX - 100) / timelineScale.value) // Account for track name area
+      const timePosition = Math.max(0, clickX / timelineScale.value) // Timeline area doesn't need offset
       
       // Snap to quarter beats
       const snappedTime = Math.round(timePosition * 4) / 4
@@ -511,7 +574,7 @@ export default {
     }
 
     function getClipStyle(clip) {
-      const leftPosition = 100 + (clip.startTime * timelineScale.value) // 100px offset for track name
+      const leftPosition = clip.startTime * timelineScale.value // No offset needed - timeline area is separate
       const width = clip.duration * timelineScale.value
       
       return {
@@ -535,9 +598,24 @@ export default {
     }
 
     function editClip(clipId) {
-      // Double-click to edit - could open MIDI editor modal
+      // Double-click to edit clip
       projectStore.selectedClipId = clipId
-      console.log('Edit clip:', clipId)
+      const clip = projectStore.clips.find(c => c.id === clipId)
+      
+      if (clip && clip.type === 'midi') {
+        showMidiEditor.value = true
+      }
+    }
+
+    function closeMidiEditor() {
+      showMidiEditor.value = false
+    }
+    
+    // Scroll synchronization
+    function syncScroll(event) {
+      if (rulerScroll.value && event.target === timelineScroll.value) {
+        rulerScroll.value.scrollLeft = event.target.scrollLeft
+      }
     }
 
     // Drag and drop functionality
@@ -658,6 +736,7 @@ export default {
       getClipDisplayName,
       selectClip,
       editClip,
+      closeMidiEditor,
       startDragging,
       startResizing,
       getTrackClips: projectStore.getTrackClips,
@@ -666,7 +745,14 @@ export default {
       // Timeline state
       isDragging,
       isResizing,
-      timelineScale
+      timelineScale,
+      timelineWidth,
+      // Template refs
+      rulerScroll,
+      timelineScroll,
+      syncScroll,
+      // Modal state
+      showMidiEditor
     }
   }
 }
@@ -699,15 +785,18 @@ export default {
   background: #9ca3af;
 }
 
-/* Timeline specific styles */
+/* Timeline specific styles - optimized for performance */
 .timeline-track {
   position: relative;
   user-select: none;
 }
 
+
+
 .timeline-clip {
   user-select: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transform: translateZ(0); /* Hardware acceleration */
 }
 
 .timeline-clip:hover {
@@ -727,9 +816,17 @@ export default {
   opacity: 1;
 }
 
-/* Timeline scrolling */
+/* Timeline scrolling - optimized for smooth performance */
 .timeline-scroll {
   scroll-behavior: smooth;
+  overflow-scrolling: touch; /* Better mobile scrolling */
+  transform: translateZ(0); /* Force hardware acceleration */
+  min-width: 0; /* Allow flexbox shrinking */
+}
+
+/* Ensure proper layout */
+.timeline-track {
+  width: 100%;
 }
 
 .timeline-scroll::-webkit-scrollbar {
@@ -744,6 +841,7 @@ export default {
 .timeline-scroll::-webkit-scrollbar-thumb {
   background: #6b7280;
   border-radius: 4px;
+  transition: background-color 0.15s ease;
 }
 
 .timeline-scroll::-webkit-scrollbar-thumb:hover {
