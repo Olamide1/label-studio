@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+body {
+  @apply bg-gray-900 text-white;
+}
+
+/* DAW specific styles */
+.track-container {
+  @apply border border-gray-700 rounded-lg;
+}
+
+.transport-button {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors;
+}
+
+.transport-button.play {
+  @apply bg-green-600 hover:bg-green-700;
+}
+
+.transport-button.stop {
+  @apply bg-red-600 hover:bg-red-700;
+}
+
+.transport-button.pause {
+  @apply bg-yellow-600 hover:bg-yellow-700;
+} 
