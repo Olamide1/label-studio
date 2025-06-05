@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws'
-import { setupWSConnection } from 'y-websocket/bin/utils.js'
+import { setupWSConnection } from 'y-websocket/bin/utils'
 import http from 'http'
 import url from 'url'
 
