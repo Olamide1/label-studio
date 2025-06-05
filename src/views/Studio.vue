@@ -144,12 +144,31 @@
                 + MIDI
               </button>
               <button 
+                @click="addTrack('audio')"
+                class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+              >
+                + Audio
+              </button>
+              <button 
                 @click="addTrack('drums')"
                 class="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded transition-colors"
               >
                 + Drums
               </button>
             </div>
+          </div>
+          
+          <!-- Import Audio Button -->
+          <div class="px-4 pb-4">
+            <button 
+              @click="openAudioImport()"
+              class="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors flex items-center justify-center space-x-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+              </svg>
+              <span>Import Audio Files</span>
+            </button>
           </div>
         </div>
 
@@ -406,6 +425,37 @@
       </div>
     </div>
   </div>
+  
+  <!-- Audio Import Modal -->
+  <div 
+    v-if="showAudioImport"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    @click.self="closeAudioImport"
+  >
+    <div class="bg-gray-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-5/6 overflow-hidden">
+      <!-- Modal Header -->
+      <div class="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">Import Audio Files</h2>
+        <button 
+          @click="closeAudioImport"
+          class="text-gray-400 hover:text-white transition-colors"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Modal Content -->
+      <div class="p-6 overflow-auto">
+        <AudioImport 
+          :targetTrackId="audioImportTargetTrack"
+          @fileImported="handleAudioImported"
+          @close="closeAudioImport"
+        />
+      </div>
+    </div>
+  </div>
 </div>
 </div>
 </template>
@@ -416,11 +466,13 @@ import { useProjectStore } from '../stores/project'
 import { useCollaborationStore } from '../stores/collaboration'
 import { useAudioStore } from '../stores/audio'
 import MidiEditor from '../components/MidiEditor.vue'
+import AudioImport from '../components/AudioImport.vue'
 
 export default {
   name: 'Studio',
   components: {
-    MidiEditor
+    MidiEditor,
+    AudioImport
   },
   setup() {
     const projectStore = useProjectStore()
@@ -431,6 +483,8 @@ export default {
     
     // Modal states
     const showMidiEditor = ref(false)
+    const showAudioImport = ref(false)
+    const audioImportTargetTrack = ref(null)
     
     // Template refs
     const rulerScroll = ref(null)
@@ -594,6 +648,8 @@ export default {
       if (clip.type === 'midi') {
         const noteCount = clip.data?.notes?.length || 0
         return noteCount > 0 ? `${noteCount} notes` : 'Empty MIDI'
+      } else if (clip.type === 'audio') {
+        return clip.name || clip.data?.originalName || 'Audio Clip'
       }
       return clip.type
     }
@@ -614,6 +670,24 @@ export default {
 
     function closeMidiEditor() {
       showMidiEditor.value = false
+    }
+    
+    function openAudioImport(targetTrackId = null) {
+      audioImportTargetTrack.value = targetTrackId
+      showAudioImport.value = true
+    }
+    
+    function closeAudioImport() {
+      showAudioImport.value = false
+      audioImportTargetTrack.value = null
+    }
+    
+    function handleAudioImported(audioFile) {
+      console.log('Audio file imported:', audioFile.name)
+      // Auto-close modal after successful import
+      setTimeout(() => {
+        closeAudioImport()
+      }, 1000)
     }
     
     // Scroll synchronization
@@ -757,7 +831,12 @@ export default {
       timelineScroll,
       syncScroll,
       // Modal state
-      showMidiEditor
+      showMidiEditor,
+      showAudioImport,
+      audioImportTargetTrack,
+      openAudioImport,
+      closeAudioImport,
+      handleAudioImported
     }
   }
 }

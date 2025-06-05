@@ -7,6 +7,7 @@ import {
   MembraneSynth, 
   PolySynth, 
   Synth,
+  Player,
   getContext
 } from 'tone';
 import { useProjectStore } from './project';
@@ -25,6 +26,7 @@ export const useAudioStore = defineStore('audio', () => {
   let masterGain = null;
   const trackOutputs = new Map(); // trackId -> Gain
   const instruments = new Map(); // trackId -> Synth/Sampler
+  const audioBuffers = new Map(); // clipId -> AudioBuffer
 
   // Initialize audio engine
   async function initializeAudio() {
@@ -152,6 +154,9 @@ export const useAudioStore = defineStore('audio', () => {
         oscillator: { type: 'sine' },
         envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
       }).connect(trackGain);
+    } else if (trackType === 'audio') {
+      // For audio tracks, we'll create players dynamically per clip
+      instrument = trackGain; // Just use the gain node as placeholder
     }
     
     instruments.set(trackId, instrument);
@@ -198,24 +203,50 @@ export const useAudioStore = defineStore('audio', () => {
     }
   }
 
+  // Load audio file and return buffer
+  async function loadAudioFile(file) {
+    try {
+      const audioContext = getContext().rawContext;
+      const arrayBuffer = await file.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      return audioBuffer;
+    } catch (error) {
+      console.error('Failed to load audio file:', error);
+      throw error;
+    }
+  }
+
   // Schedule clips for playback
   function scheduleClip(clip) {
     if (!isInitialized.value) return;
     
-    const instrument = instruments.get(clip.trackId);
-    if (!instrument || !clip.data) return;
+    const trackOutput = trackOutputs.get(clip.trackId);
+    if (!trackOutput || !clip.data) return;
     
     // Clear previous scheduling for this clip
     transport.cancel(clip.startTime);
     
-    // Schedule notes
     if (clip.type === 'midi' && clip.data.notes) {
+      // Schedule MIDI notes
+      const instrument = instruments.get(clip.trackId);
+      if (!instrument) return;
+      
       clip.data.notes.forEach(note => {
         const time = clip.startTime + note.time;
         transport.schedule((scheduleTime) => {
           instrument.triggerAttackRelease(note.pitch, note.duration, scheduleTime);
         }, time);
       });
+    } else if (clip.type === 'audio' && clip.data.audioBuffer) {
+      // Schedule audio playback
+      const player = new Player(clip.data.audioBuffer).connect(trackOutput);
+      transport.schedule((scheduleTime) => {
+        player.start(scheduleTime);
+        // Clean up player after playback
+        setTimeout(() => {
+          player.dispose();
+        }, (clip.duration * 1000) + 1000);
+      }, clip.startTime);
     }
   }
 
@@ -254,6 +285,7 @@ export const useAudioStore = defineStore('audio', () => {
     setTrackVolume,
     setTrackMute,
     playNote,
-    scheduleClip
+    scheduleClip,
+    loadAudioFile
   };
 }); 

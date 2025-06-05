@@ -151,15 +151,42 @@ export const useProjectStore = defineStore('project', () => {
   }
   
   // Clip management
-  function addClip(trackId, startTime = 0, duration = 4) {
+  function addClip(trackId, startTime = 0, duration = 4, type = 'midi') {
     const clip = {
       id: generateId(),
       trackId: trackId,
       startTime: startTime,
       duration: duration,
-      type: 'midi',
+      type: type,
+      data: type === 'midi' ? { notes: [] } : { audioBuffer: null, url: null },
+      color: getRandomColor(),
+      created: Date.now()
+    };
+    
+    clips.value.push(clip);
+    
+    if (sharedClips) {
+      sharedClips.push([clip]);
+    }
+    
+    return clip;
+  }
+  
+  // Add audio clip specifically
+  function addAudioClip(trackId, startTime, audioBuffer, duration, url = null) {
+    const clip = {
+      id: generateId(),
+      trackId: trackId,
+      startTime: startTime,
+      duration: duration,
+      type: 'audio',
       data: {
-        notes: []
+        audioBuffer: audioBuffer,
+        url: url,
+        gain: 1.0,
+        pan: 0,
+        fadeIn: 0,
+        fadeOut: 0
       },
       color: getRandomColor(),
       created: Date.now()
@@ -279,6 +306,7 @@ export const useProjectStore = defineStore('project', () => {
     removeTrack,
     updateTrack,
     addClip,
+    addAudioClip,
     removeClip,
     updateClip,
     setPlaying,
