@@ -252,16 +252,25 @@
         </div>
 
         <!-- Timeline Ruler -->
-        <div class="bg-gray-800 border-b border-gray-700 p-2">
-          <div class="flex items-center space-x-4 text-sm text-gray-300">
-            <div class="w-4">1</div>
-            <div class="w-4">2</div>
-            <div class="w-4">3</div>
-            <div class="w-4">4</div>
-            <div class="w-4">5</div>
-            <div class="w-4">6</div>
-            <div class="w-4">7</div>
-            <div class="w-4">8</div>
+        <div class="bg-gray-800 border-b border-gray-700 p-2 relative">
+          <div class="flex items-center text-sm text-gray-300" style="margin-left: 100px;">
+            <!-- Beat markers -->
+            <div 
+              v-for="beat in 32" 
+              :key="beat"
+              class="relative flex items-center justify-center text-xs"
+              :style="{ width: `${timelineScale}px` }"
+            >
+              <div class="absolute left-0 top-0 w-px h-4 bg-gray-600"></div>
+              <span v-if="beat % 4 === 1" class="font-medium">{{ Math.ceil(beat / 4) }}</span>
+              <span v-else-if="beat % 4 === 0" class="text-gray-500">{{ beat % 4 || 4 }}</span>
+              <span v-else class="text-gray-500">{{ beat % 4 }}</span>
+            </div>
+          </div>
+          
+          <!-- Track name area -->
+          <div class="absolute left-2 top-2 text-xs text-gray-400">
+            Tracks
           </div>
         </div>
 
@@ -271,11 +280,42 @@
             <div 
               v-for="track in projectStore.tracks" 
               :key="track.id"
-              class="h-16 bg-gray-800 rounded-lg relative border border-gray-700"
+              class="h-16 bg-gray-800 rounded-lg relative border border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors"
+              @click="createClipOnTimeline($event, track.id)"
             >
-              <!-- Track clips would go here -->
-              <div class="absolute inset-0 flex items-center px-4">
-                <span class="text-sm text-gray-400">{{ track.name }}</span>
+              <!-- Track name label -->
+              <div class="absolute left-2 top-2 z-10">
+                <span class="text-xs text-gray-400 bg-gray-900 px-2 py-1 rounded">{{ track.name }}</span>
+              </div>
+              
+              <!-- Track clips -->
+              <div 
+                v-for="clip in getTrackClips(track.id)" 
+                :key="clip.id"
+                class="timeline-clip absolute top-1 h-14 rounded border-2 cursor-move flex items-center justify-center text-xs font-medium text-white transition-all"
+                :style="getClipStyle(clip)"
+                :class="{ 
+                  'selected': projectStore.selectedClipId === clip.id,
+                  'ring-2 ring-purple-400': projectStore.selectedClipId === clip.id 
+                }"
+                @click.stop="selectClip(clip.id)"
+                @mousedown="startDragging($event, clip.id)"
+                @dblclick="editClip(clip.id)"
+              >
+                <div class="text-center">
+                  <div class="font-semibold">{{ getClipDisplayName(clip) }}</div>
+                  <div class="text-xs opacity-75">{{ clip.duration }}s</div>
+                </div>
+                
+                <!-- Resize handles -->
+                <div 
+                  class="resize-handle absolute left-0 top-0 w-2 h-full cursor-w-resize bg-white bg-opacity-20 hover:bg-opacity-40 transition-all"
+                  @mousedown.stop="startResizing($event, clip.id, 'left')"
+                ></div>
+                <div 
+                  class="resize-handle absolute right-0 top-0 w-2 h-full cursor-e-resize bg-white bg-opacity-20 hover:bg-opacity-40 transition-all"
+                  @mousedown.stop="startResizing($event, clip.id, 'right')"
+                ></div>
               </div>
             </div>
           </div>
@@ -309,6 +349,17 @@ export default {
     const audioStore = useAudioStore()
     
     const bpmInput = ref(120)
+    
+    // Timeline interaction state
+    const isDragging = ref(false)
+    const isResizing = ref(false)
+    const dragState = ref({
+      clipId: null,
+      startX: 0,
+      startTime: 0,
+      resizeDirection: null
+    })
+    const timelineScale = ref(50) // pixels per beat
 
     onMounted(async () => {
       // Initialize collaboration
@@ -376,6 +427,150 @@ export default {
       }
     }
 
+    // Timeline clip functions
+    function createClipOnTimeline(event, trackId) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const clickX = event.clientX - rect.left
+      const timePosition = Math.max(0, (clickX - 100) / timelineScale.value) // Account for track name area
+      
+      // Snap to quarter beats
+      const snappedTime = Math.round(timePosition * 4) / 4
+      
+      const clip = projectStore.addClip(trackId, snappedTime, 4) // 4 beat default duration
+      
+      // Create audio track if not exists
+      if (audioStore.isInitialized && !audioStore.instruments?.has(trackId)) {
+        const track = projectStore.tracks.find(t => t.id === trackId)
+        audioStore.createTrack(trackId, track?.type || 'midi')
+      }
+      
+      // Select the new clip
+      projectStore.selectedClipId = clip.id
+    }
+
+    function getClipStyle(clip) {
+      const leftPosition = 100 + (clip.startTime * timelineScale.value) // 100px offset for track name
+      const width = clip.duration * timelineScale.value
+      
+      return {
+        left: `${leftPosition}px`,
+        width: `${Math.max(width, 40)}px`, // Minimum 40px width
+        backgroundColor: clip.color || '#6366f1',
+        borderColor: clip.color || '#6366f1'
+      }
+    }
+
+    function getClipDisplayName(clip) {
+      if (clip.type === 'midi') {
+        const noteCount = clip.data?.notes?.length || 0
+        return noteCount > 0 ? `${noteCount} notes` : 'Empty MIDI'
+      }
+      return clip.type
+    }
+
+    function selectClip(clipId) {
+      projectStore.selectedClipId = clipId
+    }
+
+    function editClip(clipId) {
+      // Double-click to edit - could open MIDI editor modal
+      projectStore.selectedClipId = clipId
+      console.log('Edit clip:', clipId)
+    }
+
+    // Drag and drop functionality
+    function startDragging(event, clipId) {
+      if (event.button !== 0) return // Only left mouse button
+      
+      isDragging.value = true
+      const clip = projectStore.clips.find(c => c.id === clipId)
+      
+      dragState.value = {
+        clipId,
+        startX: event.clientX,
+        startTime: clip.startTime,
+        resizeDirection: null
+      }
+      
+      document.addEventListener('mousemove', handleDragging)
+      document.addEventListener('mouseup', stopDragging)
+      event.preventDefault()
+    }
+
+    function startResizing(event, clipId, direction) {
+      if (event.button !== 0) return
+      
+      isResizing.value = true
+      const clip = projectStore.clips.find(c => c.id === clipId)
+      
+      dragState.value = {
+        clipId,
+        startX: event.clientX,
+        startTime: clip.startTime,
+        startDuration: clip.duration,
+        resizeDirection: direction
+      }
+      
+      document.addEventListener('mousemove', handleResizing)
+      document.addEventListener('mouseup', stopResizing)
+      event.preventDefault()
+    }
+
+    function handleDragging(event) {
+      if (!isDragging.value || !dragState.value.clipId) return
+      
+      const deltaX = event.clientX - dragState.value.startX
+      const deltaTime = deltaX / timelineScale.value
+      const newTime = Math.max(0, dragState.value.startTime + deltaTime)
+      
+      // Snap to quarter beats
+      const snappedTime = Math.round(newTime * 4) / 4
+      
+      projectStore.updateClip(dragState.value.clipId, { startTime: snappedTime })
+      
+      // Add dragging class to body
+      document.body.classList.add('dragging')
+    }
+
+    function handleResizing(event) {
+      if (!isResizing.value || !dragState.value.clipId) return
+      
+      const deltaX = event.clientX - dragState.value.startX
+      const deltaTime = deltaX / timelineScale.value
+      
+      if (dragState.value.resizeDirection === 'right') {
+        const newDuration = Math.max(0.25, dragState.value.startDuration + deltaTime)
+        const snappedDuration = Math.round(newDuration * 4) / 4
+        projectStore.updateClip(dragState.value.clipId, { duration: snappedDuration })
+      } else if (dragState.value.resizeDirection === 'left') {
+        const newStartTime = Math.max(0, dragState.value.startTime + deltaTime)
+        const newDuration = Math.max(0.25, dragState.value.startDuration - deltaTime)
+        const snappedStartTime = Math.round(newStartTime * 4) / 4
+        const snappedDuration = Math.round(newDuration * 4) / 4
+        
+        projectStore.updateClip(dragState.value.clipId, { 
+          startTime: snappedStartTime,
+          duration: snappedDuration 
+        })
+      }
+    }
+
+    function stopDragging() {
+      isDragging.value = false
+      dragState.value = { clipId: null, startX: 0, startTime: 0, resizeDirection: null }
+      document.removeEventListener('mousemove', handleDragging)
+      document.removeEventListener('mouseup', stopDragging)
+      document.body.classList.remove('dragging')
+    }
+
+    function stopResizing() {
+      isResizing.value = false
+      dragState.value = { clipId: null, startX: 0, startTime: 0, resizeDirection: null }
+      document.removeEventListener('mousemove', handleResizing)
+      document.removeEventListener('mouseup', stopResizing)
+      document.body.classList.remove('dragging')
+    }
+
     // Sync BPM from project store
     watch(() => projectStore.bpm, (newBpm) => {
       bpmInput.value = newBpm
@@ -394,7 +589,19 @@ export default {
       updateTrackVolume,
       toggleMute,
       toggleSolo,
-      testTrackSound
+      testTrackSound,
+      // Timeline functions
+      createClipOnTimeline,
+      getClipStyle,
+      getClipDisplayName,
+      selectClip,
+      editClip,
+      startDragging,
+      startResizing,
+      // Timeline state
+      isDragging,
+      isResizing,
+      timelineScale
     }
   }
 }
@@ -425,5 +632,43 @@ export default {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Timeline specific styles */
+.timeline-track {
+  position: relative;
+  user-select: none;
+}
+
+.timeline-clip {
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-clip:hover {
+  filter: brightness(110%);
+}
+
+.timeline-clip.selected {
+  box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.5), 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.resize-handle {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.timeline-clip:hover .resize-handle {
+  opacity: 1;
+}
+
+/* Prevent text selection during dragging */
+.dragging {
+  user-select: none;
+  cursor: grabbing !important;
+}
+
+.dragging * {
+  cursor: grabbing !important;
 }
 </style> 
