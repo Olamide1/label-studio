@@ -101,6 +101,37 @@
           <div class="text-white font-mono text-lg">
             {{ audioStore.formattedPosition }}
           </div>
+          
+          <!-- Undo/Redo Buttons -->
+          <div class="flex items-center space-x-1">
+            <button 
+              @click="projectStore.undo()"
+              :disabled="!historyStore.canUndo"
+              :title="historyStore.undoDescription"
+              class="p-2 rounded text-sm transition-colors"
+              :class="historyStore.canUndo 
+                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed'"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+              </svg>
+            </button>
+            
+            <button 
+              @click="projectStore.redo()"
+              :disabled="!historyStore.canRedo"
+              :title="historyStore.redoDescription"
+              class="p-2 rounded text-sm transition-colors"
+              :class="historyStore.canRedo 
+                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed'"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a8 8 0 00-8 8v2m18-10l-6-6m6 6l-6 6"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="flex items-center space-x-4">
@@ -461,10 +492,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useProjectStore } from '../stores/project'
 import { useCollaborationStore } from '../stores/collaboration'
 import { useAudioStore } from '../stores/audio'
+import { useHistoryStore } from '../stores/history'
 import MidiEditor from '../components/MidiEditor.vue'
 import AudioImport from '../components/AudioImport.vue'
 
@@ -478,6 +510,7 @@ export default {
     const projectStore = useProjectStore()
     const collaborationStore = useCollaborationStore()
     const audioStore = useAudioStore()
+    const historyStore = useHistoryStore()
     
     const bpmInput = ref(120)
     
@@ -524,7 +557,51 @@ export default {
         projectStore.initializeProject()
       }
       
+      // Initialize history system
+      projectStore.initializeHistory()
+      
+      // Set up keyboard shortcuts
+      document.addEventListener('keydown', handleKeyDown)
     })
+    
+    // Cleanup on unmount
+    onUnmounted(() => {
+      document.removeEventListener('keydown', handleKeyDown)
+    })
+    
+    // Keyboard shortcut handler
+    function handleKeyDown(event) {
+      // Prevent shortcuts when typing in inputs
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return
+      }
+      
+      const isCtrl = event.ctrlKey || event.metaKey
+      
+      if (isCtrl && event.key === 'z' && !event.shiftKey) {
+        // Ctrl+Z = Undo
+        event.preventDefault()
+        projectStore.undo()
+      } else if (isCtrl && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+        // Ctrl+Y or Ctrl+Shift+Z = Redo
+        event.preventDefault()
+        projectStore.redo()
+      } else if (event.key === ' ') {
+        // Spacebar = Play/Pause
+        event.preventDefault()
+        if (audioStore.isPlaying) {
+          audioStore.pause()
+        } else {
+          initializeAndPlay()
+        }
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        // Delete selected clips
+        if (projectStore.selectedClipId) {
+          event.preventDefault()
+          projectStore.removeClip(projectStore.selectedClipId)
+        }
+      }
+    }
 
     async function initializeAndPlay() {
       if (!audioStore.isInitialized) {
@@ -538,8 +615,15 @@ export default {
       projectStore.setBPM(bpmInput.value)
     }
 
-    function addTrack(type) {
+    async function addTrack(type) {
       const track = projectStore.addTrack(type)
+      
+      // Initialize audio engine if needed
+      if (!audioStore.isInitialized) {
+        await audioStore.initializeAudio()
+      }
+      
+      // Create audio track
       if (audioStore.isInitialized) {
         audioStore.createTrack(track.id, type)
       }
@@ -799,6 +883,7 @@ export default {
       projectStore,
       collaborationStore,
       audioStore,
+      historyStore,
       bpmInput,
       initializeAndPlay,
       updateBPM,

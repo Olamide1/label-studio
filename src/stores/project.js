@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { useCollaborationStore } from './collaboration';
+import { useHistoryStore } from './history';
 
 export const useProjectStore = defineStore('project', () => {
   // Project state
@@ -90,8 +91,27 @@ export const useProjectStore = defineStore('project', () => {
     if (sharedTimeSignature !== undefined) timeSignature.value = sharedTimeSignature;
   }
   
+  // Helper function to save history before major actions
+  function saveHistorySnapshot(description) {
+    const historyStore = useHistoryStore();
+    historyStore.createSnapshot({
+      projectName: projectName.value,
+      bpm: bpm.value,
+      timeSignature: timeSignature.value,
+      tracks: tracks.value,
+      clips: clips.value,
+      selectedTrackId: selectedTrackId.value,
+      selectedClipId: selectedClipId.value,
+      loopEnabled: loopEnabled.value,
+      loopStart: loopStart.value,
+      loopEnd: loopEnd.value
+    }, description);
+  }
+
   // Track management
   function addTrack(type = 'midi') {
+    saveHistorySnapshot(`Add ${type} track`);
+    
     const track = {
       id: generateId(),
       name: `Track ${tracks.value.length + 1}`,
@@ -114,8 +134,11 @@ export const useProjectStore = defineStore('project', () => {
   }
   
   function removeTrack(trackId) {
-    const index = tracks.value.findIndex(t => t.id === trackId);
-    if (index !== -1) {
+    const track = tracks.value.find(t => t.id === trackId);
+    if (track) {
+      saveHistorySnapshot(`Remove track "${track.name}"`);
+      
+      const index = tracks.value.findIndex(t => t.id === trackId);
       tracks.value.splice(index, 1);
       
       if (sharedTracks) {
@@ -140,6 +163,21 @@ export const useProjectStore = defineStore('project', () => {
   function updateTrack(trackId, updates) {
     const index = tracks.value.findIndex(t => t.id === trackId);
     if (index !== -1) {
+      // Only save history for significant changes (not volume adjustments)
+      const significantKeys = ['name', 'muted', 'solo'];
+      const hasSignificantChange = Object.keys(updates).some(key => significantKeys.includes(key));
+      
+      if (hasSignificantChange) {
+        const changeDescription = Object.keys(updates).map(key => {
+          if (key === 'muted') return updates[key] ? 'Mute track' : 'Unmute track';
+          if (key === 'solo') return updates[key] ? 'Solo track' : 'Unsolo track';
+          if (key === 'name') return `Rename track to "${updates[key]}"`;
+          return `Update ${key}`;
+        }).join(', ');
+        
+        saveHistorySnapshot(changeDescription);
+      }
+      
       Object.assign(tracks.value[index], updates);
       
       if (sharedTracks) {
@@ -152,6 +190,9 @@ export const useProjectStore = defineStore('project', () => {
   
   // Clip management
   function addClip(trackId, startTime = 0, duration = 4, type = 'midi') {
+    const track = tracks.value.find(t => t.id === trackId);
+    saveHistorySnapshot(`Add ${type} clip${track ? ` to "${track.name}"` : ''}`);
+    
     const clip = {
       id: generateId(),
       trackId: trackId,
@@ -174,6 +215,9 @@ export const useProjectStore = defineStore('project', () => {
   
   // Add audio clip specifically
   function addAudioClip(trackId, startTime, audioBuffer, duration, url = null) {
+    const track = tracks.value.find(t => t.id === trackId);
+    saveHistorySnapshot(`Import audio clip${track ? ` to "${track.name}"` : ''}`);
+    
     const clip = {
       id: generateId(),
       trackId: trackId,
@@ -202,8 +246,11 @@ export const useProjectStore = defineStore('project', () => {
   }
   
   function removeClip(clipId) {
-    const index = clips.value.findIndex(c => c.id === clipId);
-    if (index !== -1) {
+    const clip = clips.value.find(c => c.id === clipId);
+    if (clip) {
+      saveHistorySnapshot(`Delete ${clip.type} clip`);
+      
+      const index = clips.value.findIndex(c => c.id === clipId);
       clips.value.splice(index, 1);
       
       if (sharedClips) {
@@ -215,12 +262,35 @@ export const useProjectStore = defineStore('project', () => {
   function updateClip(clipId, updates) {
     const index = clips.value.findIndex(c => c.id === clipId);
     if (index !== -1) {
+      const clip = clips.value[index];
+      
+      // Only save history for significant changes (not minor position adjustments)
+      const significantKeys = ['data', 'name'];
+      const hasSignificantChange = Object.keys(updates).some(key => {
+        if (significantKeys.includes(key)) return true;
+        if (key === 'startTime' || key === 'duration') {
+          // Only save for major time changes (> 0.25 beats)
+          const oldValue = clip[key] || 0;
+          const newValue = updates[key] || 0;
+          return Math.abs(newValue - oldValue) > 0.25;
+        }
+        return false;
+      });
+      
+      if (hasSignificantChange) {
+        if (updates.data) {
+          saveHistorySnapshot(`Edit ${clip.type} clip content`);
+        } else {
+          saveHistorySnapshot(`Move/resize ${clip.type} clip`);
+        }
+      }
+      
       Object.assign(clips.value[index], updates);
       
       if (sharedClips) {
-        const clip = { ...clips.value[index] };
+        const updatedClip = { ...clips.value[index] };
         sharedClips.delete(index);
-        sharedClips.insert(index, [clip]);
+        sharedClips.insert(index, [updatedClip]);
       }
     }
   }
@@ -279,6 +349,39 @@ export const useProjectStore = defineStore('project', () => {
     return clips.value.filter(c => c.trackId === trackId);
   }
   
+  // History management functions
+  function undo() {
+    const historyStore = useHistoryStore();
+    return historyStore.undo({
+      projectName, bpm, timeSignature, tracks, clips,
+      selectedTrackId, selectedClipId, loopEnabled, loopStart, loopEnd
+    });
+  }
+  
+  function redo() {
+    const historyStore = useHistoryStore();
+    return historyStore.redo({
+      projectName, bpm, timeSignature, tracks, clips,
+      selectedTrackId, selectedClipId, loopEnabled, loopStart, loopEnd
+    });
+  }
+  
+  function initializeHistory() {
+    const historyStore = useHistoryStore();
+    historyStore.initializeHistory({
+      projectName: projectName.value,
+      bpm: bpm.value,
+      timeSignature: timeSignature.value,
+      tracks: tracks.value,
+      clips: clips.value,
+      selectedTrackId: selectedTrackId.value,
+      selectedClipId: selectedClipId.value,
+      loopEnabled: loopEnabled.value,
+      loopStart: loopStart.value,
+      loopEnd: loopEnd.value
+    }, 'Project opened');
+  }
+  
   return {
     // State
     projectName,
@@ -313,6 +416,11 @@ export const useProjectStore = defineStore('project', () => {
     setPosition,
     setBPM,
     setProjectName,
-    getTrackClips
+    getTrackClips,
+    
+    // History management
+    undo,
+    redo,
+    initializeHistory
   };
 }); 
