@@ -14,24 +14,52 @@
         <!-- Add Effect Section -->
         <div class="bg-gray-700 rounded-lg p-3">
           <h4 class="text-sm font-medium text-white mb-3">Add Effect</h4>
-          <div class="grid grid-cols-1 gap-2">
-            <button
-              v-for="[effectId, effectInfo] in availableEffects"
-              :key="effectId"
-              @click="addEffect(effectId)"
-              :disabled="loadingEffect === effectId"
-              class="px-3 py-2 text-white text-sm rounded transition-colors flex items-center justify-between"
-              :class="loadingEffect === effectId 
-                ? 'bg-gray-600 cursor-not-allowed' 
-                : 'bg-purple-600 hover:bg-purple-700'"
-            >
-              <span>{{ effectInfo.name }}</span>
-              <div class="flex items-center space-x-1">
-                <span v-if="loadingEffect === effectId" class="text-xs">Loading...</span>
-                <span v-else class="text-xs opacity-75">{{ effectInfo.type }}</span>
-                <span v-if="effectInfo.needsLoading" class="text-xs bg-blue-500 px-1 rounded">WAM</span>
-              </div>
-            </button>
+          
+          <!-- Built-in Effects -->
+          <div class="mb-4">
+            <h5 class="text-xs font-medium text-gray-400 mb-2">Built-in Effects</h5>
+            <div class="grid grid-cols-1 gap-2">
+              <button
+                v-for="[effectId, effectInfo] in builtInEffects"
+                :key="effectId"
+                @click="addEffect(effectId)"
+                :disabled="loadingEffect === effectId"
+                class="px-3 py-2 text-white text-sm rounded transition-colors flex items-center justify-between"
+                :class="loadingEffect === effectId 
+                  ? 'bg-gray-600 cursor-not-allowed' 
+                  : 'bg-purple-600 hover:bg-purple-700'"
+              >
+                <span>{{ effectInfo.name }}</span>
+                <div class="flex items-center space-x-1">
+                  <span v-if="loadingEffect === effectId" class="text-xs">Loading...</span>
+                  <span v-else class="text-xs opacity-75 capitalize">{{ effectInfo.type }}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- WAM Effects -->
+          <div v-if="wamEffects.length > 0">
+            <h5 class="text-xs font-medium text-gray-400 mb-2">WAM Plugins</h5>
+            <div class="grid grid-cols-1 gap-2">
+              <button
+                v-for="[effectId, effectInfo] in wamEffects"
+                :key="effectId"
+                @click="addEffect(effectId)"
+                :disabled="loadingEffect === effectId"
+                class="px-3 py-2 text-white text-sm rounded transition-colors flex items-center justify-between"
+                :class="loadingEffect === effectId 
+                  ? 'bg-gray-600 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700'"
+              >
+                <span>{{ effectInfo.name }}</span>
+                <div class="flex items-center space-x-1">
+                  <span v-if="loadingEffect === effectId" class="text-xs">Loading...</span>
+                  <span v-else class="text-xs opacity-75">WAM</span>
+                  <span v-if="effectInfo.needsLoading" class="text-xs bg-orange-500 px-1 rounded">Load</span>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -66,6 +94,22 @@
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M6 2l2-2h4l2 2h4v2H2V2h4zM3 6v12a2 2 0 002 2h10a2 2 0 002-2V6H3z"/>
                   </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Effect Presets -->
+            <div v-if="getPresetsForEffect(effect.type).size > 0" class="mb-3">
+              <h5 class="text-xs font-medium text-gray-400 mb-2">Presets</h5>
+              <div class="grid grid-cols-2 gap-1">
+                <button
+                  v-for="[presetKey, preset] in getPresetsForEffect(effect.type)"
+                  :key="presetKey"
+                  @click="applyPresetToEffect(effect, presetKey)"
+                  class="px-2 py-1 bg-gray-600 hover:bg-purple-600 text-white text-xs rounded transition-colors"
+                  :title="preset.description"
+                >
+                  {{ preset.name }}
                 </button>
               </div>
             </div>
@@ -124,6 +168,7 @@ import { computed, ref } from 'vue'
 import { useProjectStore } from '../stores/project'
 import { usePluginsStore } from '../stores/plugins'
 import { useAudioStore } from '../stores/audio'
+import { usePresetsStore } from '../stores/presets'
 
 export default {
   name: 'EffectsPanel',
@@ -131,6 +176,7 @@ export default {
     const projectStore = useProjectStore()
     const pluginsStore = usePluginsStore()
     const audioStore = useAudioStore()
+    const presetsStore = usePresetsStore()
     
     const loadingEffect = ref(null)
 
@@ -144,6 +190,26 @@ export default {
     const trackEffects = computed(() => {
       if (!projectStore.selectedTrackId) return []
       return pluginsStore.getTrackEffects(projectStore.selectedTrackId)
+    })
+
+    const builtInEffects = computed(() => {
+      const effects = new Map()
+      availableEffects.value.forEach((effectInfo, effectId) => {
+        if (!effectInfo.isWAM) {
+          effects.set(effectId, effectInfo)
+        }
+      })
+      return effects
+    })
+
+    const wamEffects = computed(() => {
+      const effects = []
+      availableEffects.value.forEach((effectInfo, effectId) => {
+        if (effectInfo.isWAM) {
+          effects.push([effectId, effectInfo])
+        }
+      })
+      return effects
     })
 
     async function addEffect(effectType) {
@@ -235,10 +301,28 @@ export default {
       return `${formatted}${paramInfo.unit || ''}`
     }
 
+    function getPresetsForEffect(effectType) {
+      return presetsStore.getPresetsForEffect(effectType)
+    }
+
+    function applyPresetToEffect(effect, presetKey) {
+      if (!projectStore.selectedTrackId) return
+
+      // Create update function for this specific effect
+      const updateFunction = (paramName, value) => {
+        updateParameter(effect.id, paramName, value)
+      }
+
+      // Apply the preset
+      presetsStore.applyPreset(effect.type, presetKey, updateFunction)
+    }
+
     return {
       selectedTrack,
       availableEffects,
       trackEffects,
+      builtInEffects,
+      wamEffects,
       loadingEffect,
       addEffect,
       removeEffect,
@@ -246,7 +330,9 @@ export default {
       updateParameter,
       getParameterValue,
       getParameterStep,
-      formatParameterValue
+      formatParameterValue,
+      getPresetsForEffect,
+      applyPresetToEffect
     }
   }
 }
