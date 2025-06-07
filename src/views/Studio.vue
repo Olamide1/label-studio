@@ -426,6 +426,11 @@
           </div>
         </div>
       </div>
+
+      <!-- Effects Panel -->
+      <div class="w-80 flex-shrink-0">
+        <EffectsPanel />
+      </div>
     </div>
   </div>
 </div>
@@ -497,20 +502,24 @@ import { useProjectStore } from '../stores/project'
 import { useCollaborationStore } from '../stores/collaboration'
 import { useAudioStore } from '../stores/audio'
 import { useHistoryStore } from '../stores/history'
+import { usePluginsStore } from '../stores/plugins'
 import MidiEditor from '../components/MidiEditor.vue'
 import AudioImport from '../components/AudioImport.vue'
+import EffectsPanel from '../components/EffectsPanel.vue'
 
 export default {
   name: 'Studio',
   components: {
     MidiEditor,
-    AudioImport
+    AudioImport,
+    EffectsPanel
   },
   setup() {
     const projectStore = useProjectStore()
     const collaborationStore = useCollaborationStore()
     const audioStore = useAudioStore()
     const historyStore = useHistoryStore()
+    const pluginsStore = usePluginsStore()
     
     const bpmInput = ref(120)
     
